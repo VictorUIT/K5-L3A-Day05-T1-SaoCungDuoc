@@ -8,6 +8,7 @@
   const report = engine.report;
   const stateLabels = { START: 'Chưa bắt đầu', ASSESSING: 'Đang xem kịch bản', NEEDS_MORE_INFO: 'Cần thêm thông tin', SAFE_INFO: 'Thông tin trong phạm vi', NEEDS_PHARMACIST: 'Cần dược sĩ', URGENT: 'Cần trợ giúp khẩn cấp', AWAITING_APPROVAL: 'Chờ duyệt mô phỏng', COMPLETE: 'Đã hoàn tất mô phỏng', FAILED: 'Chưa thể tiếp tục' };
   const toolNames = { goi_y_san_pham: 'Gợi ý sản phẩm', chuyen_duoc_si: 'Chuyển dược sĩ', khuyen_di_kham: 'Khuyến nghị đi khám', luu_ghi_chu_suc_khoe: 'Lưu ghi chú sức khỏe', ban_thuoc_ke_don: 'Bán thuốc kê đơn' };
+  const levelNames = { AUTO: 'Tự làm', APPROVAL: 'Cần người duyệt', FORBID: 'Cấm' };
   function element(tag, value, className) {
     const el = document.createElement(tag);
     if (value != null) el.textContent = value;
@@ -23,13 +24,16 @@
     $('integration-summary').replaceChildren(...[
       'P1 · ' + report.counts.scenarios + '/≥8 kịch bản',
       'P2 · ' + report.counts.flows + ' flow',
-      'P3 · ' + report.counts.tools + '/5 policy hợp lệ',
+      'P3 · ' + report.counts.declaredTools + '/5 mức đã nhận',
+      'P3 · ' + report.counts.tools + '/5 cấu hình thực thi hợp lệ',
       report.ready ? 'Cấu trúc hợp lệ · cần nhóm xác nhận nội dung' : 'Chờ tích hợp · chưa chốt M3'
     ].map(value => element('span', value)));
     $('policy-list').replaceChildren(...window.P4Validation.TOOL_IDS.map(id => {
       const row = element('div', null, 'policy-row');
       const policy = policyFor(id);
-      row.append(element('code', id), element('span', id === 'ban_thuoc_ke_don' ? 'CẤM · Track T1' : policy && !window.P4Validation.validateTool(id, policy) ? policy.level : 'PENDING_P3 · khóa'));
+      const declared = policy && !window.P4Validation.validateToolDeclaration(id, policy);
+      const label = id === 'ban_thuoc_ke_don' ? 'Cấm · Track T1' : declared ? levelNames[policy.level] + (window.P4Validation.validateTool(id, policy) ? ' · chờ chi tiết' : '') : 'PENDING_P3 · khóa';
+      row.append(element('code', id), element('span', label));
       return row;
     }));
     $('issue-list').replaceChildren(...report.issues.map(issue => element('li', [issue.code, issue.sourceFile, issue.scenarioId ? 'case ' + issue.scenarioId : '', issue.toolId || '', issue.conflict, 'Người quyết định: ' + issue.whoMustDecide].filter(Boolean).join(' · '))));
@@ -109,13 +113,34 @@
   function updateClock(pending) {
     $('approval-clock').textContent = pending.expiresAt === null ? 'Chưa đồng ý thì không lưu nội dung.' : 'Còn ' + Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000)) + ' giây · quá hạn không tự thực thi.';
   }
+  function scenarioReady(scenario) {
+    return Boolean(scenario && scenario.flowId && ux.flows && window.P4Validation.own(ux.flows, scenario.flowId) && !report.issues.some(issue => issue.severity === 'ERROR' && ['P1', 'P2'].includes(issue.whoMustDecide) && (!issue.scenarioId || issue.scenarioId === scenario.id)));
+  }
+  function selectScenario() {
+    const scenario = Array.isArray(scenarios) && scenarios.find(s => s.id === $('scenario-select').value);
+    $('scenario-detail').hidden = !scenario;
+    $('scenario-start').disabled = !scenarioReady(scenario);
+    if (!scenario) return;
+    $('scenario-note').textContent = scenario.id + (scenario.isPriority ? ' · Ca ưu tiên' : '') + (scenarioReady(scenario) ? ' · Có luồng P2, có thể bắt đầu.' : ' · Đã nhận P1. PENDING_P2: chưa có luồng trả lời để bắt đầu.');
+    $('scenario-message').textContent = scenario.message;
+    $('scenario-failure').textContent = scenario.failureMode;
+    $('scenario-expected').textContent = scenario.expectedBehavior;
+    $('scenario-harm').textContent = scenario.harmReason || scenario.harmLevel;
+    $('scenario-source').textContent = scenario.evidence.join('\n');
+  }
   if (Array.isArray(scenarios) && scenarios.length) {
     $('scenario-select').replaceChildren(...scenarios.filter(s => s && typeof s.id === 'string').map(s => {
       const option = element('option', s.id + (s.isPriority ? ' · Ưu tiên' : '')); option.value = s.id; return option;
     }));
-    $('scenario-select').disabled = false; $('scenario-start').disabled = false;
-    $('scenario-note').textContent = 'Chọn ID để chạy đúng kịch bản đã cung cấp; không suy diễn từ khóa.';
+    $('scenario-select').disabled = false;
+    if (!report.counts.flows) {
+      $('empty-state-title').textContent = 'Đã nhận ' + scenarios.length + ' kịch bản';
+      $('empty-state-copy').textContent = 'Chọn ID để xem nội dung nguồn P1. Đang chờ lời thoại, nút bấm và luồng P2 để bắt đầu mô phỏng. Bạn vẫn có thể thử tin nhắn dựng bên dưới.';
+      $('empty-state-pill').textContent = 'Chưa chạy ca khi thiếu luồng P2';
+    }
+    selectScenario();
   }
+  $('scenario-select').addEventListener('change', selectScenario);
   $('scenario-start').addEventListener('click', () => { render(engine.start($('scenario-select').value)); focusResult(); });
   $('composer').addEventListener('submit', event => {
     event.preventDefault(); const value = $('message-input').value.trim(); if (!value) return;

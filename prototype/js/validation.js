@@ -8,18 +8,27 @@
   const own = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key);
   const record = value => value != null && typeof value === 'object' && !Array.isArray(value);
   const kindOf = state => state && (state.kind || state.id);
-  function validateTool(id, policy) {
+  function validateToolDeclaration(id, policy) {
     if (!TOOL_IDS.includes(id)) return 'Tool không có trong Track T1.';
     if (!record(policy)) return 'PENDING_P3: chưa có policy.';
     if (!['AUTO', 'APPROVAL', 'FORBID'].includes(policy.level)) return 'Mức tự chủ không hợp lệ.';
     if (!text(policy.justification)) return 'Thiếu lý do cost-of-error.';
-    if (!Array.isArray(policy.conditions) || policy.conditions.some(c => !text(c))) return 'conditions phải là danh sách điều kiện có nội dung.';
-    if (!['none', 'khách', 'dược sĩ'].includes(policy.approver)) return 'approver phải là none, khách hoặc dược sĩ.';
-    if (!text(policy.timeoutBehavior) || !text(policy.fallback)) return 'Thiếu timeoutBehavior hoặc fallback của P3.';
     if (id === 'ban_thuoc_ke_don' && policy.level !== 'FORBID') return 'Xung đột Track T1: bán thuốc kê đơn luôn bị cấm.';
+    return null;
+  }
+  function validateTool(id, policy) {
+    const declarationError = validateToolDeclaration(id, policy);
+    if (declarationError) return declarationError;
+    // FORBID has no approval path and therefore needs no fictitious timeout/approver.
     if (policy.level === 'FORBID') return null;
+    if (policy.conditions == null) return 'PENDING_P3: chưa có điều kiện thực thi.';
+    if (!Array.isArray(policy.conditions) || policy.conditions.some(c => !text(c))) return 'conditions phải là danh sách điều kiện có nội dung.';
+    if (policy.approver == null) return 'PENDING_P3: chưa chỉ định người duyệt.';
+    if (!['none', 'khách', 'dược sĩ'].includes(policy.approver)) return 'approver phải là none, khách hoặc dược sĩ.';
     if (policy.level === 'AUTO' && policy.approver !== 'none') return 'AUTO không được ngầm bỏ qua người duyệt.';
+    if (policy.level === 'APPROVAL' && (policy.timeoutMs == null || !text(policy.timeoutBehavior) || !text(policy.fallback))) return 'PENDING_P3: chưa có thời hạn duyệt, timeoutBehavior hoặc fallback.';
     if (policy.level === 'APPROVAL' && (policy.approver === 'none' || !Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs <= 0)) return 'APPROVAL cần người duyệt và timeoutMs dương do P3 cung cấp.';
+    if (policy.conditions.length && policy.conditionChecks == null) return 'PENDING_P3: chưa có mapping điều kiện thực thi.';
     const checks = policy.conditionChecks || [];
     if (!Array.isArray(checks) || checks.length !== policy.conditions.length || checks.some(c => !record(c) || !SAFETY_FIELDS.includes(c.field) || typeof c.equals !== 'boolean')) return 'Điều kiện chưa có conditionChecks tương ứng; không thể tự suy diễn để cho phép.';
     return null;
@@ -43,7 +52,7 @@
     TOOL_IDS.forEach(id => {
       const policy = own(tools, id) ? tools[id] : null;
       const error = validateTool(id, policy);
-      if (error) issue('P3', error, null, id, policy ? 'ERROR' : 'PENDING');
+      if (error) issue('P3', error, null, id, error.startsWith('PENDING_P3') ? 'PENDING' : 'ERROR');
     });
     Object.keys(tools).filter(id => !TOOL_IDS.includes(id)).forEach(id => issue('P3', 'Tool ngoài Track T1 chưa được hỗ trợ.', null, id));
     const ids = new Set();
@@ -51,13 +60,14 @@
       if (!record(s) || !text(s.id)) { issue('P1', 'Kịch bản thiếu id hoặc sai cấu trúc.'); return; }
       if (ids.has(s.id)) issue('P1', 'Trùng id kịch bản.', s.id);
       ids.add(s.id);
-      ['message', 'failureMode', 'expectedBehavior', 'flowId'].forEach(key => { if (!text(s[key])) issue('P1', 'Thiếu ' + key + '.', s.id); });
+      ['message', 'failureMode', 'expectedBehavior'].forEach(key => { if (!text(s[key])) issue('P1', 'Thiếu ' + key + '.', s.id); });
       if (!['source', 'ambiguity', 'authority', 'domain'].includes(s.riskClass)) issue('P1', 'riskClass không hợp lệ.', s.id);
       if (!['minor', 'recoverable', 'unacceptable'].includes(s.harmLevel)) issue('P1', 'harmLevel không hợp lệ.', s.id);
       if (typeof s.isPriority !== 'boolean') issue('P1', 'Thiếu isPriority dạng boolean.', s.id);
       if (!Array.isArray(s.evidence) || !s.evidence.length || s.evidence.some(e => !text(e))) issue('P1', 'Thiếu evidence cụ thể.', s.id);
       if (s.safety != null && (!record(s.safety) || SAFETY_FIELDS.some(f => typeof s.safety[f] !== 'boolean'))) issue('P1', 'safety cần đủ 4 trường boolean; không dùng giá trị suy đoán.', s.id);
-      if (!own(flows, s.flowId)) { issue('P2', 'flowId không có trong P2_UX.flows.', s.id); return; }
+      if (!text(s.flowId)) { issue('P2', 'Chưa có mapping flowId cho kịch bản đã nhận.', s.id, null, 'PENDING'); return; }
+      if (!own(flows, s.flowId)) { issue('P2', 'flowId không có trong P2_UX.flows.', s.id, null, Object.keys(flows).length ? 'ERROR' : 'PENDING'); return; }
       const flow = flows[s.flowId];
       if (!record(flow) || !Array.isArray(flow.states) || !flow.states.length) { issue('P2', 'Flow cần ít nhất một state.', s.id); return; }
       const stateIds = new Set();
@@ -90,7 +100,7 @@
         if (!record(a) || !text(a.principle) || !text(a.reason) || !targets.has(a.targetId)) issue('P2', 'HAX/PAIR thiếu nội dung hoặc targetId không có điểm neo UI.', s.id);
       });
     });
-    return { ready: issues.length === 0, issues, counts: { scenarios: cases.length, flows: Object.keys(flows).length, tools: TOOL_IDS.filter(id => own(tools, id) && !validateTool(id, tools[id])).length } };
+    return { ready: issues.length === 0, issues, counts: { scenarios: cases.length, flows: Object.keys(flows).length, declaredTools: TOOL_IDS.filter(id => own(tools, id) && !validateToolDeclaration(id, tools[id])).length, tools: TOOL_IDS.filter(id => own(tools, id) && !validateTool(id, tools[id])).length } };
   }
-  root.P4Validation = Object.freeze({ TOOL_IDS, STATES, SAFETY_FIELDS, validate, validateTool, kindOf, own });
+  root.P4Validation = Object.freeze({ TOOL_IDS, STATES, SAFETY_FIELDS, validate, validateTool, validateToolDeclaration, kindOf, own });
 })(window);

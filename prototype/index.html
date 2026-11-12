@@ -39,6 +39,15 @@
         <select id="scenario-select" disabled><option value="">Chưa có dữ liệu P1</option></select>
         <button id="scenario-start" class="button button-primary full-width" disabled type="button">Bắt đầu kịch bản <span aria-hidden="true">→</span></button>
         <div id="scenario-note" class="scenario-note">PENDING_P1 · Chờ kịch bản được nhóm xác nhận.</div>
+        <details id="scenario-detail" class="scenario-detail" hidden>
+          <summary>Xem kịch bản nguồn P1</summary>
+          <h3>Tin người dùng</h3><p id="scenario-message"></p>
+          <h3>AI có thể sai thế nào</h3><p id="scenario-failure"></p>
+          <h3>Sản phẩm tốt phải làm · yêu cầu P1</h3><p id="scenario-expected"></p>
+          <h3>Nhãn hậu quả</h3><p id="scenario-harm"></p>
+          <p id="scenario-source"></p>
+          <p>Đây là yêu cầu thiết kế của P1, chưa phải lời AI trả lời. Không chạy tool từ phần xem nguồn.</p>
+        </details>
         <div class="side-rule"></div>
         <h3>Trong bản mô phỏng này</h3>
         <ul class="scope-list">
@@ -59,9 +68,9 @@
           <div id="empty-state" class="empty-state">
             <div class="chat-illustration" aria-hidden="true"><div class="paper"><i></i><i></i><i></i><b>+</b></div><span>···</span></div>
             <p class="eyebrow">SẴN SÀNG TIẾP NHẬN DỮ LIỆU</p>
-            <h3>Khung trò chuyện đã sẵn sàng</h3>
-            <p>Chưa có dữ liệu P1/P2/P3.<br>Chọn kịch bản sau khi nhóm tích hợp, hoặc thử một tin nhắn giả lập bên dưới.</p>
-            <span class="pill">Mọi tool đang khóa mặc định</span>
+            <h3 id="empty-state-title">Khung trò chuyện đã sẵn sàng</h3>
+            <p id="empty-state-copy">Chưa có dữ liệu P1/P2/P3.<br>Chọn kịch bản sau khi nhóm tích hợp, hoặc thử một tin nhắn giả lập bên dưới.</p>
+            <span id="empty-state-pill" class="pill">Mọi tool đang khóa mặc định</span>
           </div>
           <div id="urgent-card" class="urgent-card" role="alert" hidden></div>
           <div id="messages" class="messages" role="log" aria-label="Nội dung trò chuyện" aria-live="polite"></div>

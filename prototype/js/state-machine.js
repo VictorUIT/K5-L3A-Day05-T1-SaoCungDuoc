@@ -6,7 +6,7 @@
   function authorizeAction(toolId, context = {}, autonomy = {}) {
     if (!V.TOOL_IDS.includes(toolId)) return blocked('Tool không thuộc Track T1.');
     if (toolId === 'ban_thuoc_ke_don') return blocked('Track T1 không cho phép bán thuốc kê đơn trong prototype.');
-    if (V.TOOL_IDS.some(id => !V.own(autonomy.tools, id) || V.validateTool(id, autonomy.tools[id]))) return blocked('PENDING_P3: cần policy hợp lệ cho đủ 5 tool trước khi thực thi.', 'PENDING_P3');
+    if (V.TOOL_IDS.some(id => !V.own(autonomy.tools, id) || V.validateToolDeclaration(id, autonomy.tools[id]))) return blocked('PENDING_P3: cần mức và lý do hợp lệ cho đủ 5 tool trước khi thực thi.', 'PENDING_P3');
     const policy = V.own(autonomy.tools, toolId) ? autonomy.tools[toolId] : null;
     const error = V.validateTool(toolId, policy);
     if (error) return blocked(error, 'PENDING_P3');
@@ -53,7 +53,7 @@
     function start(id) {
       reset();
       const candidate = scenarios.find(s => s.id === id);
-      if (!candidate || report.issues.some(i => i.severity === 'ERROR' && ['P1', 'P2'].includes(i.whoMustDecide) && (!i.scenarioId || i.scenarioId === id))) {
+      if (!candidate || !candidate.flowId || !V.own(ux.flows, candidate.flowId) || report.issues.some(i => i.severity === 'ERROR' && ['P1', 'P2'].includes(i.whoMustDecide) && (!i.scenarioId || i.scenarioId === id))) {
         transition('FAILED'); model.notice = 'Kịch bản chưa đủ dữ liệu hợp lệ. Xem Trạng thái tích hợp.'; return snapshot();
       }
       scenario = candidate; flow = ux.flows[scenario.flowId];
