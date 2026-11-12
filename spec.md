@@ -1,10 +1,13 @@
-**Lớp:** \_\_\_\_ · **Bàn / zone:** \_\_\_\_ · **Track:** \_\_\_\_
+**Lớp:** H210 · **Bàn / zone:** Zone 1 · **Track:** T1 — Healthcare (Pharmacity)
 
 | **Họ và Tên** | **Mã Học Viên** | **Việc đã làm** |
 | ------------- | --------------- | --------------- |
-|               |                 |                 |
-|               |                 |                 |
-|               |                 |                 |
+| Đỗ Phương Nam | 2A202603621 | **P1 — Analysis & Tổng hợp.** Viết §1 (lát cắt, phạm vi, các việc AI không làm); 2 kịch bản lớp ① nguồn sự thật; phân loại lỗi và cách xử lý (§3); ghi lại các quan điểm khác nhau (§4); rà soát §1–§4 và bảng test; viết 3 tiêu chí Pass/Fail (§6); tổng hợp spec.md; trình bày lát cắt và 2 rủi ro lớn khi demo. |
+| Nguyễn Văn Ngọc Sơn | 2A202603600 | **P2 — UX Design.** Tham chiếu UX; 2 kịch bản lớp ② mơ hồ/thiếu thông tin; viết câu trả lời AI và áp dụng HAX/PAIR (§3); đề xuất cách hiển thị 3 mức tự chủ trên UI; hoàn thiện nội dung UI, cảnh báo, nhãn HAX/PAIR (§5); kiểm tra tính dễ hiểu của cảnh báo (§6); trình bày UX và HAX/PAIR khi demo. |
+| Trần Quốc Tuấn Khanh | 2A202603625 | **P3 — Autonomy.** Liệt kê 5 tool và rủi ro; 2 kịch bản lớp ③ ngoài thẩm quyền; xác định khi nào dừng/chuyển dược sĩ (§3); tổng hợp bảng phân quyền 5 tool (§4); dữ liệu kịch bản và quy tắc an toàn cho prototype (§5); kiểm tra không vi phạm quy tắc an toàn (§6); trình bày mức tự chủ và lý do khi demo. |
+| Nguyễn Bình An | 2A202603606 | **P4 — Prototype.** Chuẩn bị khung prototype; 2 kịch bản lớp ④ rủi ro y tế đặc thù; phác thảo 1–2 màn hình wireframe (§3); chuẩn bị logic áp dụng mức tự chủ trong prototype (§4); code giao diện HTML/CSS/JS (§5); sửa lỗi UI và chạy lại prototype (§6); demo prototype và xử lý ca lạ. |
+
+**Việc làm chung (cả nhóm):** chốt lát cắt và 3 việc AI không làm (sau chặng 1); gộp 8+ kịch bản và chọn 2 kịch bản đắt nhất K4, K8 (M1, sau chặng 2); chốt bảng phân quyền 5 tool (sau chặng 4); chạy thử nhanh prototype (M3, cuối chặng 5).
 
 # Dàn ý bài nộp *(spec.md — nộp trước 23:59 ngày lab của lớp)*
 
@@ -12,8 +15,8 @@
 >
 > **Một quyết định = bốn ý:** đã cân nhắc phương án nào · chọn phương án nào · vì sao · loại các phương án kia vì sao. Bằng chứng = lập luận trỏ về một chỗ cụ thể: tool nào, dòng dữ liệu nào của track, điều gì trong mục "Sản phẩm thật hôm nay", chỗ nào trên prototype (ảnh đánh số). Không chạy agent.
 
-# Bài nộp LAB5 — [Track] · Nhóm [tên]
-[Danh sách thành viên và việc mỗi người làm — copy bảng từ README]
+# Bài nộp LAB5 — Track T1 Healthcare (Pharmacity) · Nhóm Sao Cũng Được · Lớp H210 · Zone 1
+Thành viên: Đỗ Phương Nam (P1) · Nguyễn Văn Ngọc Sơn (P2) · Trần Quốc Tuấn Khanh (P3) · Nguyễn Bình An (P4). Việc từng người làm: xem bảng ở đầu file.
 
 ## §1. Lát cắt & phạm vi
 - Lát cắt (chép từ track).
