@@ -1,0 +1,11 @@
+# Local instructions; never include these in a submission.
+[Aa][Gg][Ee][Nn][Tt][Ss]*.md
+[Aa][Gg][Ee][Nn][Tt].md
+.env
+.env.*
+!.env.example
+node_modules/
+.DS_Store
+Thumbs.db
+.tmp/
+test-results/

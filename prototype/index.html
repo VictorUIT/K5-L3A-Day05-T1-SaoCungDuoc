@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Prototype Hỏi dược sĩ — khung tích hợp P1, P2, P3; chỉ dùng dữ liệu dựng.">
+  <title>Hỏi dược sĩ · SaoCungDuoc</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script defer src="data/p1-scenarios.js"></script>
+  <script defer src="data/p2-ux.js"></script>
+  <script defer src="data/p3-autonomy.js"></script>
+  <script defer src="js/validation.js"></script>
+  <script defer src="js/mock-tools.js"></script>
+  <script defer src="js/state-machine.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#message-input">Đến khung nhắn tin</a>
+  <div class="prototype-banner">Prototype mô phỏng — không phải tư vấn y tế thật</div>
+  <header class="site-header wrap">
+    <a class="brand" href="index.html" aria-label="Hỏi dược sĩ — bắt đầu lại">
+      <span class="brand-icon" aria-hidden="true">✚</span>
+      <span>Hỏi dược sĩ<small>SAOCUNGDUOC · LAB 05</small></span>
+    </a>
+    <button id="integration-open" class="button button-quiet" type="button">Trạng thái tích hợp <span id="issue-count" class="count">…</span></button>
+  </header>
+  <main class="wrap">
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">TRACK T1 / HEALTHCARE</p>
+      <h1 id="page-title">Một cuộc trò chuyện.<br><span>Rõ ràng từng bước.</span></h1>
+      <p>Thử trải nghiệm hỏi thêm, xem lại thông tin và chuyển dược sĩ trong một bản mô phỏng.</p>
+    </section>
+    <div class="workspace">
+      <aside class="scenario-panel" aria-labelledby="scenario-title">
+        <p class="eyebrow">KHÔNG GIAN THỬ NGHIỆM</p>
+        <h2 id="scenario-title">Chọn tình huống</h2>
+        <label for="scenario-select">Kịch bản do nhóm cung cấp</label>
+        <select id="scenario-select" disabled><option value="">Chưa có dữ liệu P1</option></select>
+        <button id="scenario-start" class="button button-primary full-width" disabled type="button">Bắt đầu kịch bản <span aria-hidden="true">→</span></button>
+        <div id="scenario-note" class="scenario-note">PENDING_P1 · Chờ kịch bản được nhóm xác nhận.</div>
+        <div class="side-rule"></div>
+        <h3>Trong bản mô phỏng này</h3>
+        <ul class="scope-list">
+          <li>Chỉ dùng dữ liệu dựng.</li>
+          <li>Không kết nối dược sĩ thật.</li>
+          <li>Không kê đơn hay đặt mua thuốc.</li>
+          <li>Đóng trang sẽ xóa nội dung phiên.</li>
+        </ul>
+        <div class="privacy-note"><span aria-hidden="true">◇</span><p>Thông tin trong phiên chỉ ở bộ nhớ tạm. Bạn có thể xóa bất cứ lúc nào.</p></div>
+      </aside>
+      <section class="chat-panel" aria-labelledby="chat-title">
+        <header class="chat-header">
+          <div class="assistant-mark" aria-hidden="true">✚</div>
+          <div class="chat-heading"><h2 id="chat-title">Trợ lý Hỏi dược sĩ</h2><p>AI · mô phỏng <span aria-hidden="true">/</span> <span id="state-label">Chưa bắt đầu</span></p></div>
+          <button id="reset" class="button button-small" type="button">Xóa phiên</button>
+        </header>
+        <div class="chat-body">
+          <div id="empty-state" class="empty-state">
+            <div class="chat-illustration" aria-hidden="true"><div class="paper"><i></i><i></i><i></i><b>+</b></div><span>···</span></div>
+            <p class="eyebrow">SẴN SÀNG TIẾP NHẬN DỮ LIỆU</p>
+            <h3>Khung trò chuyện đã sẵn sàng</h3>
+            <p>Chưa có dữ liệu P1/P2/P3.<br>Chọn kịch bản sau khi nhóm tích hợp, hoặc thử một tin nhắn giả lập bên dưới.</p>
+            <span class="pill">Mọi tool đang khóa mặc định</span>
+          </div>
+          <div id="urgent-card" class="urgent-card" role="alert" hidden></div>
+          <div id="messages" class="messages" role="log" aria-label="Nội dung trò chuyện" aria-live="polite"></div>
+          <section id="evidence-card" class="evidence-card" data-anchor="evidence" hidden aria-labelledby="evidence-title"><h3 id="evidence-title">Căn cứ & thông tin còn thiếu</h3><p id="evidence-text"></p></section>
+          <p id="notification-text" class="session-notice" hidden></p>
+          <div id="flow-actions" class="flow-actions" data-anchor="actions"></div>
+          <section id="approval-card" class="approval-card" hidden aria-labelledby="approval-title">
+            <p class="eyebrow">DUYỆT GIẢ LẬP</p><h3 id="approval-title">Chờ người duyệt</h3>
+            <p id="approval-description"></p><p id="approval-clock" class="muted"></p>
+            <label class="consent" id="consent-row" hidden><input id="consent" type="checkbox"> Tôi đồng ý mô phỏng lưu nội dung đang hiển thị trong bộ nhớ tạm của phiên này.</label>
+            <div class="flow-actions"><button id="approve" class="button button-primary" type="button">Duyệt mô phỏng</button><button id="reject" class="button" type="button">Từ chối</button><button id="cancel-approval" class="button button-quiet" type="button">Hủy yêu cầu</button></div>
+          </section>
+          <div id="session-notice" class="session-notice" role="status" aria-live="polite"></div>
+          <div class="session-controls" id="session-controls" hidden>
+            <button id="correct" class="text-button" type="button" data-anchor="correction">Sửa thông tin</button>
+            <button id="handoff" class="text-button" type="button">Yêu cầu chuyển dược sĩ (mô phỏng)</button>
+            <button id="undo" class="text-button" type="button" hidden>Hủy thao tác mô phỏng</button>
+            <button id="discard-note" class="text-button" type="button" hidden>Hủy lưu ghi chú mô phỏng</button>
+          </div>
+        </div>
+        <form id="composer" class="composer">
+          <label for="message-input">Tin nhắn giả lập <span>· không nhập thông tin sức khỏe thật</span></label>
+          <div class="input-row"><textarea id="message-input" rows="2" maxlength="2000" placeholder="Nhập một tin nhắn dựng để thử đường lui…" required></textarea><button class="button button-primary" type="submit" aria-label="Gửi tin nhắn giả lập">Gửi <span aria-hidden="true">↑</span></button></div>
+          <p>Không có AI API. Tin nhắn tự do luôn đi qua thông báo giới hạn, không được phân tích y tế.</p>
+        </form>
+      </section>
+    </div>
+    <footer class="page-footer"><span>SaoCungDuoc</span><span>Thiết kế cho sự rõ ràng. Quyền thực thi cần được xác nhận.</span><span>LAB 05 · P4</span></footer>
+  </main>
+  <dialog id="integration-dialog" aria-labelledby="integration-title">
+    <div class="dialog-heading"><div><p class="eyebrow">DEVELOPMENT / INTEGRATION</p><h2 id="integration-title">Trạng thái tích hợp</h2></div><button id="integration-close" class="button button-small" type="button">Đóng</button></div>
+    <p>Đây là kiểm tra cấu trúc dữ liệu. Nhóm vẫn cần xác nhận nội dung chuyên môn và quyết định nghiệp vụ.</p>
+    <div id="integration-summary" class="integration-summary"></div>
+    <h3>Quyền của 5 tool</h3><div id="policy-list" class="policy-list"></div>
+    <h3>Cần nhóm cung cấp / INTEGRATION_ISSUE</h3><ul id="issue-list" class="issue-list"></ul>
+    <h3>Điểm neo P2 trên màn hình hiện tại</h3><ul id="anchor-list" class="issue-list"></ul>
+  </dialog>
+  <noscript><p class="noscript">Cần bật JavaScript để chạy prototype cục bộ.</p></noscript>
+</body>
+</html>
