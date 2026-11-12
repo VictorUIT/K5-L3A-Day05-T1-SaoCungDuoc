@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Hỏi dược sĩ · SaoCungDuoc</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script defer src="data/p1-scenarios.js"></script>
+  <script defer src="data/p2-ux.js"></script>
+  <script defer src="data/p3-autonomy.js"></script>
+  <script defer src="js/validation.js"></script>
+  <script defer src="js/mock-tools.js"></script>
+  <script defer src="js/state-machine.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#role-tabs">Đến nội dung</a>
+  <div class="prototype-banner">Prototype mô phỏng — không phải tư vấn y tế thật</div>
+  <header class="site-header wrap">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">✚</span><span>Hỏi dược sĩ<small>SAOCUNGDUOC</small></span></div>
+    <div id="role-tabs" class="tabs" role="tablist" aria-label="Vai trò">
+      <button id="customer-tab" class="tab" role="tab" aria-selected="true" aria-controls="story-view" tabindex="0" type="button">Khách hàng</button>
+      <button id="pharmacist-tab" class="tab" role="tab" aria-selected="false" aria-controls="story-view" tabindex="-1" type="button">Dược sĩ </button>
+    </div>
+  </header>
+  <main class="wrap app-layout">
+    <aside class="case-panel" aria-labelledby="case-heading">
+      <p class="eyebrow">TÌNH HUỐNG</p><h1 id="case-heading">Hai ca cần chú ý</h1>
+      <div id="case-list" class="case-list"></div><div class="demo-settings"><button id="annotation-toggle" class="button" type="button">Bật chú thích ①</button></div>
+      <button id="reset-case" class="button button-quiet reset-button" type="button">Bắt đầu lại ca này</button>
+    </aside>
+    <section id="story-view" aria-live="polite"></section>
+  </main>
+  <footer class="wrap footer"><span>SaoCungDuoc</span><span>LAB 05 · Hỏi dược sĩ</span></footer>
+  <noscript><p>Cần bật JavaScript để mở prototype.</p></noscript>
+</body>
+</html>

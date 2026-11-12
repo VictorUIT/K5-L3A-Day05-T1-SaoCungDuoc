@@ -1,0 +1,1 @@
+(function(g){'use strict';g.T1_VALIDATION={validate(){const issues=[];for(const id of ['K4','K8']){if(!g.P2_UX?.scenarios?.[id])issues.push('Missing P2 '+id);}if(!g.T1_AUTONOMY?.evaluateToolRequest)issues.push('Missing P3');return issues;}};})(window);
