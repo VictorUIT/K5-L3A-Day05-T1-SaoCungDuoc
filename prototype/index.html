@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Hỏi dược sĩ · SaoCungDuoc</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script defer src="data/p1-scenarios.js"></script>
+  <script defer src="data/p2-ux.js"></script>
+  <script defer src="data/p3-autonomy.js"></script>
+  <script defer src="js/validation.js"></script>
+  <script defer src="js/mock-tools.js"></script>
+  <script defer src="js/state-machine.js"></script>
+  <script defer src="js/review-workflow.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#role-tabs">Đến nội dung</a>
+  <div class="prototype-banner">Prototype mô phỏng — không phải tư vấn y tế thật</div>
+  <header class="site-header wrap">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">✚</span><span>Hỏi dược sĩ<small>SAOCUNGDUOC</small></span></div>
+    <div id="role-tabs" class="tabs" role="tablist" aria-label="Vai trò">
+      <button id="customer-tab" class="tab" role="tab" aria-selected="true" aria-controls="customer-view" tabindex="0" type="button">Khách hàng</button>
+      <button id="pharmacist-tab" class="tab" role="tab" aria-selected="false" aria-controls="pharmacist-view" tabindex="-1" type="button">Dược sĩ <span id="pending-count" class="count">0</span></button>
+    </div>
+  </header>
+  <main class="wrap app-layout">
+    <aside class="case-panel" aria-labelledby="case-heading">
+      <p class="eyebrow">TÌNH HUỐNG</p><h1 id="case-heading">Hai ca cần chú ý</h1>
+      <div id="case-list" class="case-list"></div>
+      <button id="reset-case" class="button button-quiet reset-button" type="button">Bắt đầu lại ca này</button>
+    </aside>
+    <section id="customer-view" role="tabpanel" aria-labelledby="customer-tab">
+      <div class="panel customer-panel">
+        <header class="panel-header"><div class="assistant-icon" aria-hidden="true">✚</div><div><h2>Trợ lý Hỏi dược sĩ</h2><p>AI · mô phỏng</p></div><span id="customer-status" class="status-pill"></span></header>
+        <div class="chat-content">
+          <div id="urgent-alert" class="alert urgent" data-anchor="evidence" role="alert" hidden></div>
+          <div id="child-warning" class="alert advisory" hidden></div>
+          <div id="messages" class="messages" role="log" aria-label="Cuộc trò chuyện" aria-live="polite"></div>
+          <section id="screening-section" class="screening-section" aria-labelledby="screening-heading" hidden>
+            <div class="section-heading"><div><p class="eyebrow">THÔNG TIN CỦA BÉ</p><h3 id="screening-heading">Bổ sung để dược sĩ xem xét</h3></div><span class="temperature">39°C</span></div>
+            <form id="screening-form" data-anchor="correction"><div id="screening-fields" class="field-grid"></div></form>
+            <div id="customer-notice" class="inline-notice" role="status" aria-live="polite"></div>
+            <div class="action-row" data-anchor="actions"><button id="send-review" class="button button-primary" type="button">Gửi dược sĩ xem xét <span aria-hidden="true">→</span></button><button id="cancel-review" class="button" type="button" hidden>Hủy yêu cầu</button></div>
+          </section>
+          <section id="product-card" class="product-card" data-anchor="approved-product" aria-labelledby="product-name" hidden>
+            <div class="approved-label">✓ Đã được dược sĩ duyệt</div><div class="product-body"><div class="product-icon" aria-hidden="true">✚</div><div><h3 id="product-name"></h3><p id="product-description"></p></div></div>
+          </section>
+        </div>
+        <form id="composer" class="composer"><label for="message-input">Lời nhắn thêm</label><div class="input-row"><textarea id="message-input" rows="2" maxlength="1500" placeholder="Nhập lời nhắn…"></textarea><button class="button button-primary" type="submit">Gửi <span aria-hidden="true">↑</span></button></div></form>
+      </div>
+    </section>
+    <section id="pharmacist-view" role="tabpanel" aria-labelledby="pharmacist-tab" hidden>
+      <div class="panel pharmacist-panel">
+        <header class="panel-header"><div class="assistant-icon" aria-hidden="true">✚</div><div><h2>Bàn tiếp nhận dược sĩ</h2><p>Duyệt đề xuất · mô phỏng</p></div><span id="pharmacist-status" class="status-pill"></span></header>
+        <div class="review-content">
+          <div class="queue-header"><h3>Ca tiếp nhận</h3><span id="queue-summary"></span></div><div id="review-queue" class="review-queue"></div>
+          <div id="pharmacist-alert" class="alert urgent" role="status" hidden></div>
+          <div id="review-empty" class="review-empty"><span aria-hidden="true">◇</span><h3>Chưa có đề xuất chờ duyệt</h3><p>Yêu cầu gửi từ màn hình khách hàng sẽ xuất hiện tại đây.</p></div>
+          <div id="review-detail" hidden>
+            <div class="review-title"><div><p class="eyebrow" id="request-id"></p><h3 id="review-case-title"></h3></div><span id="review-status" class="status-pill"></span></div>
+            <section class="review-section"><h4>Thông tin sàng lọc</h4><dl id="screening-summary" class="screening-summary"></dl></section>
+            <section class="draft-card" aria-labelledby="draft-heading"><div class="draft-label">ĐỀ XUẤT AI · NỘI BỘ</div><h4 id="draft-heading"></h4><p id="draft-description"></p><p id="draft-rationale"></p></section>
+            <div id="review-missing" class="inline-notice"></div>
+            <form id="decision-form">
+              <label for="review-note">Phản hồi cho khách hàng</label><textarea id="review-note" rows="3" maxlength="1500" placeholder="Lý do từ chối hoặc thông tin cần bổ sung…"></textarea>
+              <label class="review-check"><input id="review-confirm" type="checkbox"> Đã kiểm tra thông tin sàng lọc và đề xuất</label>
+              <div id="decision-notice" class="inline-notice" role="status" aria-live="polite"></div>
+              <div class="action-row"><button id="approve" class="button button-primary" type="button" disabled>Duyệt đề xuất</button><button id="request-info" class="button" type="button">Yêu cầu bổ sung</button><button id="reject" class="button button-danger" type="button">Từ chối</button></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap footer"><span>SaoCungDuoc</span><span>LAB 05 · Hỏi dược sĩ</span></footer>
+  <noscript><p>Cần bật JavaScript để mở prototype.</p></noscript>
+</body>
+</html>
