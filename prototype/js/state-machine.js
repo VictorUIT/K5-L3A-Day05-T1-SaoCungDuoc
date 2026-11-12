@@ -2,12 +2,12 @@
  'use strict';const clone=x=>JSON.parse(JSON.stringify(x));
  function create(){let serial=0;const cases={};
   function reset(id){cases[id]={id,version:++serial,step:0,chatTurns:0,age:null,handoff:'idle',ack:false,reply:'',emergency:false,notice:'',contact:false,correction:'',outcome:'success',messages:[]};}
-  ['K4','K8'].forEach(reset);
+  Object.keys(g.P2_UX.scenarios).forEach(reset);
   function get(id){if(!cases[id])throw Error('Unknown case');return cases[id];}
   function context(s){return {...g.P2_UX.scenarios[s.id].policyContext,...(s.emergency?{emergency:true,highRisk:true,riskGroup:'high'}:{})};}
   function invalidate(s){s.version=++serial;s.ack=false;s.reply='';s.messages=s.messages.filter(m=>m.role!=='pharmacist');}
   function pair(s,slot,user,ai){const index=s.messages.findIndex(m=>m.slot===slot);s.messages=s.messages.filter(m=>m.slot!==slot);s.messages.splice(index<0?s.messages.length:index,0,{role:'user',slot,text:user},{role:'assistant',slot,text:ai});}
-  function sync(s){const r=g.T1_MOCK_TOOLS.invoke('chuyen_duoc_si',context(s),s.outcome);s.handoff=r.transport==='MOCK_SUCCESS'?'transferred':'failed';s.step=2;}
+  function sync(s){if(g.P2_UX.scenarios[s.id].handoffEnabled===false){s.handoff='not-required';s.step=2;return;}const r=g.T1_MOCK_TOOLS.invoke('chuyen_duoc_si',context(s),s.outcome);s.handoff=r.transport==='MOCK_SUCCESS'?'transferred':'failed';s.step=2;}
   function act(id,action,value){const s=get(id),d=g.P2_UX.scenarios[id];
    if(action==='reset'){reset(id);return true;}
    if(action==='outcome'&&['success','failure'].includes(value)){s.outcome=value;return true;}
