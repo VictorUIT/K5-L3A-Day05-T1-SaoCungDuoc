@@ -26,11 +26,11 @@
     if (policy.approver == null) return 'PENDING_P3: chưa chỉ định người duyệt.';
     if (!['none', 'khách', 'dược sĩ'].includes(policy.approver)) return 'approver phải là none, khách hoặc dược sĩ.';
     if (policy.level === 'AUTO' && policy.approver !== 'none') return 'AUTO không được ngầm bỏ qua người duyệt.';
-    if (policy.level === 'APPROVAL' && (policy.timeoutMs == null || !text(policy.timeoutBehavior) || !text(policy.fallback))) return 'PENDING_P3: chưa có thời hạn duyệt, timeoutBehavior hoặc fallback.';
-    if (policy.level === 'APPROVAL' && (policy.approver === 'none' || !Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs <= 0)) return 'APPROVAL cần người duyệt và timeoutMs dương do P3 cung cấp.';
+    if (policy.level === 'APPROVAL' && ((policy.timeoutMode !== 'manual' && policy.timeoutMs == null) || !text(policy.timeoutBehavior) || !text(policy.fallback))) return 'PENDING_P3: chưa có thời hạn duyệt, timeoutBehavior hoặc fallback.';
+    if (policy.level === 'APPROVAL' && (policy.approver === 'none' || (policy.timeoutMode !== 'manual' && (!Number.isSafeInteger(policy.timeoutMs) || policy.timeoutMs <= 0)))) return 'APPROVAL cần người duyệt và thời hạn hoặc chế độ chờ thủ công.';
     if (policy.conditions.length && policy.conditionChecks == null) return 'PENDING_P3: chưa có mapping điều kiện thực thi.';
     const checks = policy.conditionChecks || [];
-    if (!Array.isArray(checks) || checks.length !== policy.conditions.length || checks.some(c => !record(c) || !SAFETY_FIELDS.includes(c.field) || typeof c.equals !== 'boolean')) return 'Điều kiện chưa có conditionChecks tương ứng; không thể tự suy diễn để cho phép.';
+    if (!Array.isArray(checks) || checks.length !== policy.conditions.length || checks.some(c => !record(c) || ![...SAFETY_FIELDS, 'pharmacistReviewed'].includes(c.field) || typeof c.equals !== 'boolean')) return 'Điều kiện chưa có conditionChecks tương ứng; không thể tự suy diễn để cho phép.';
     return null;
   }
   function validate(scenarios, ux, autonomy) {
@@ -41,10 +41,11 @@
     }
     const cases = Array.isArray(scenarios) ? scenarios : [];
     if (!Array.isArray(scenarios)) issue('P1', 'P1_SCENARIOS phải là một mảng.');
-    if (cases.length < 8) issue('P1', 'Cần ít nhất 8 kịch bản; hiện có ' + cases.length + '.', null, null, 'PENDING');
+    const priorityDemo = ux && ux.demoScope === 'priority-only';
+    if (cases.length < (priorityDemo ? 2 : 8)) issue('P1', 'Chưa đủ kịch bản cho phạm vi hiện tại.', null, null, 'PENDING');
     if (cases.filter(s => s && s.isPriority === true).length !== 2) issue('P1', 'Cần đúng 2 ca ưu tiên do P1 chốt.', null, null, 'PENDING');
     const classes = new Set(cases.map(s => s && s.riskClass));
-    ['source', 'ambiguity', 'authority', 'domain'].forEach(c => { if (!classes.has(c)) issue('P1', 'Chưa có kịch bản lớp ' + c + '.', null, null, 'PENDING'); });
+    if (!priorityDemo) ['source', 'ambiguity', 'authority', 'domain'].forEach(c => { if (!classes.has(c)) issue('P1', 'Chưa có kịch bản lớp ' + c + '.', null, null, 'PENDING'); });
     const flows = record(ux) && record(ux.flows) ? ux.flows : {};
     if (!Object.keys(flows).length) issue('P2', 'Chưa có flows, lời thoại, notification và điểm neo HAX/PAIR.', null, null, 'PENDING');
     ['unknownInput', 'simulatedHandoff'].forEach(key => { if (!text(ux && ux.common && ux.common[key])) issue('P2', 'Thiếu common.' + key + '.'); });
@@ -65,7 +66,7 @@
       if (!['minor', 'recoverable', 'unacceptable'].includes(s.harmLevel)) issue('P1', 'harmLevel không hợp lệ.', s.id);
       if (typeof s.isPriority !== 'boolean') issue('P1', 'Thiếu isPriority dạng boolean.', s.id);
       if (!Array.isArray(s.evidence) || !s.evidence.length || s.evidence.some(e => !text(e))) issue('P1', 'Thiếu evidence cụ thể.', s.id);
-      if (s.safety != null && (!record(s.safety) || SAFETY_FIELDS.some(f => typeof s.safety[f] !== 'boolean'))) issue('P1', 'safety cần đủ 4 trường boolean; không dùng giá trị suy đoán.', s.id);
+      if (s.safety != null && (!record(s.safety) || SAFETY_FIELDS.some(f => typeof s.safety[f] !== 'boolean' && s.safety[f] !== null))) issue('P1', 'safety cần đủ 4 trường boolean hoặc null khi chưa rõ.', s.id);
       if (!text(s.flowId)) { issue('P2', 'Chưa có mapping flowId cho kịch bản đã nhận.', s.id, null, 'PENDING'); return; }
       if (!own(flows, s.flowId)) { issue('P2', 'flowId không có trong P2_UX.flows.', s.id, null, Object.keys(flows).length ? 'ERROR' : 'PENDING'); return; }
       const flow = flows[s.flowId];

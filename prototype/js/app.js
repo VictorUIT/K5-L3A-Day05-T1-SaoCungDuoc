@@ -1,177 +1,161 @@
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  const scenarios = window.P1_SCENARIOS || [];
-  const ux = window.P2_UX || {};
-  const autonomy = window.P3_AUTONOMY || {};
-  const engine = window.P4State.createEngine(scenarios, ux, autonomy);
-  const report = engine.report;
-  const stateLabels = { START: 'Chưa bắt đầu', ASSESSING: 'Đang xem kịch bản', NEEDS_MORE_INFO: 'Cần thêm thông tin', SAFE_INFO: 'Thông tin trong phạm vi', NEEDS_PHARMACIST: 'Cần dược sĩ', URGENT: 'Cần trợ giúp khẩn cấp', AWAITING_APPROVAL: 'Chờ duyệt mô phỏng', COMPLETE: 'Đã hoàn tất mô phỏng', FAILED: 'Chưa thể tiếp tục' };
-  const toolNames = { goi_y_san_pham: 'Gợi ý sản phẩm', chuyen_duoc_si: 'Chuyển dược sĩ', khuyen_di_kham: 'Khuyến nghị đi khám', luu_ghi_chu_suc_khoe: 'Lưu ghi chú sức khỏe', ban_thuoc_ke_don: 'Bán thuốc kê đơn' };
-  const levelNames = { AUTO: 'Tự làm', APPROVAL: 'Cần người duyệt', FORBID: 'Cấm' };
-  function element(tag, value, className) {
+  const scenarios = window.P1_SCENARIOS;
+  const ux = window.P2_UX;
+  const workflow = window.P4Review.create(scenarios, ux, window.P3_AUTONOMY);
+  const report = window.P4Validation.validate(scenarios, ux, window.P3_AUTONOMY);
+  if (!report.ready) console.error('[integration]', report.issues);
+  let activeCase = 'K8';
+  let role = 'customer';
+  let shownRequest = null;
+  let customerError = '';
+  let decisionError = '';
+  let renderedSignature = '';
+  function signature() { return workflow.customerView(activeCase).status + JSON.stringify(workflow.queue()); }
+  const node = (tag, text, className) => {
     const el = document.createElement(tag);
-    if (value != null) el.textContent = value;
+    if (text != null) el.textContent = text;
     if (className) el.className = className;
     return el;
+  };
+  const setStatus = (id, view) => { $(id).textContent = view.statusLabel; $(id).dataset.state = view.status; };
+  function selectCase(id) { activeCase = id; customerError = ''; decisionError = ''; render(); }
+  function selectRole(next, focus = false) {
+    role = next; render();
+    if (focus) $(role === 'customer' ? 'customer-tab' : 'pharmacist-tab').focus();
   }
-  function button(label, handler, className = 'button') {
-    const el = element('button', label, className); el.type = 'button'; el.addEventListener('click', handler); return el;
-  }
-  function policyFor(id) { return autonomy.tools && window.P4Validation.own(autonomy.tools, id) ? autonomy.tools[id] : null; }
-  function renderIntegration(model) {
-    $('issue-count').textContent = String(report.issues.length);
-    $('integration-summary').replaceChildren(...[
-      'P1 · ' + report.counts.scenarios + '/≥8 kịch bản',
-      'P2 · ' + report.counts.flows + ' flow',
-      'P3 · ' + report.counts.declaredTools + '/5 mức đã nhận',
-      'P3 · ' + report.counts.tools + '/5 cấu hình thực thi hợp lệ',
-      report.ready ? 'Cấu trúc hợp lệ · cần nhóm xác nhận nội dung' : 'Chờ tích hợp · chưa chốt M3'
-    ].map(value => element('span', value)));
-    $('policy-list').replaceChildren(...window.P4Validation.TOOL_IDS.map(id => {
-      const row = element('div', null, 'policy-row');
-      const policy = policyFor(id);
-      const declared = policy && !window.P4Validation.validateToolDeclaration(id, policy);
-      const label = id === 'ban_thuoc_ke_don' ? 'Cấm · Track T1' : declared ? levelNames[policy.level] + (window.P4Validation.validateTool(id, policy) ? ' · chờ chi tiết' : '') : 'PENDING_P3 · khóa';
-      row.append(element('code', id), element('span', label));
-      return row;
-    }));
-    $('issue-list').replaceChildren(...report.issues.map(issue => element('li', [issue.code, issue.sourceFile, issue.scenarioId ? 'case ' + issue.scenarioId : '', issue.toolId || '', issue.conflict, 'Người quyết định: ' + issue.whoMustDecide].filter(Boolean).join(' · '))));
-    if (!report.issues.length) $('issue-list').append(element('li', 'Không có lỗi cấu trúc. Không thay thế kiểm tra chuyên môn của nhóm.'));
-    const anchors = model.anchors || [];
-    $('anchor-list').replaceChildren(...(anchors.length ? anchors.map(a => {
-      const target = Array.from(document.querySelectorAll('[data-anchor]')).find(el => el.dataset.anchor === a.targetId);
-      return element('li', a.principle + ' → ' + a.targetId + ' · ' + (target && !target.closest('[hidden]') ? 'Có trên UI hiện tại' : 'Chưa hiện ở state này') + ' · ' + a.reason);
-    }) : [element('li', 'PENDING_P2 · Chưa gán nguyên tắc hoặc số minh chứng khi chưa có quyết định của P2.') ]));
-  }
-  function renderAnchors(model) {
-    document.querySelectorAll('.anchor-badge').forEach(el => el.remove());
-    (model.anchors || []).forEach((anchor, index) => {
-      const target = Array.from(document.querySelectorAll('[data-anchor]')).find(el => el.dataset.anchor === anchor.targetId);
-      if (!target || target.closest('[hidden]')) return;
-      const badge = element('span', String(index + 1), 'anchor-badge');
-      badge.title = anchor.principle + ': ' + anchor.reason;
-      badge.setAttribute('aria-label', 'Điểm ' + (index + 1) + ': ' + anchor.principle);
-      target.prepend(badge);
+  const caseButtons = scenarios.map(scenario => {
+    const el = node('button', null, 'case-option'); el.type = 'button'; el.dataset.caseId = scenario.id;
+    el.append(node('small', scenario.id === 'K4' ? 'K4 · KHẨN CẤP' : 'K8 · CẦN SÀNG LỌC'), node('strong', ux.review.titles[scenario.id]));
+    el.addEventListener('click', () => selectCase(scenario.id)); return el;
+  });
+  $('case-list').append(...caseButtons);
+  ux.review.fields.forEach(field => {
+    const wrap = node('div', null, 'field'); const label = node('label', field.label); label.htmlFor = 'field-' + field.id;
+    const input = node('select'); input.id = 'field-' + field.id; input.name = field.id;
+    const blank = node('option', 'Chọn thông tin'); blank.value = ''; input.append(blank);
+    field.options.forEach(([value, text]) => { const option = node('option', text); option.value = value; input.append(option); });
+    input.addEventListener('change', () => {
+      const result = workflow.updateScreening(activeCase, field.id, input.value);
+      customerError = result.ok ? '' : result.error; decisionError = ''; render();
     });
-  }
-  function render(model) {
-    $('state-label').textContent = stateLabels[model.state];
-    $('empty-state').hidden = model.messages.length > 0;
-    $('messages').replaceChildren(...model.messages.map((message, index) => {
-      const item = element('div', null, 'message ' + message.role);
-      item.append(element('span', message.role === 'user' ? 'BẠN · DỮ LIỆU DỰNG' : 'AI · MÔ PHỎNG', 'message-label'), document.createTextNode(message.text));
-      if (index === model.messages.length - 1 && model.stepId) item.dataset.anchor = model.stepId;
-      return item;
+    wrap.append(label, input); $('screening-fields').append(wrap);
+  });
+  function renderCustomer() {
+    const view = workflow.customerView(activeCase);
+    setStatus('customer-status', view);
+    $('urgent-alert').hidden = !view.alerts.length;
+    $('urgent-alert').textContent = view.alerts.join('\n');
+    $('child-warning').hidden = activeCase !== 'K8' || view.alerts.length > 0;
+    $('child-warning').textContent = ux.review.childWarning;
+    $('messages').replaceChildren(...view.messages.map(message => {
+      const el = node('div', null, 'message ' + message.role);
+      el.append(node('span', { user: 'BẠN', assistant: 'AI · MÔ PHỎNG', pharmacist: 'DƯỢC SĨ · MÔ PHỎNG' }[message.role], 'message-label'), document.createTextNode(message.text));
+      return el;
     }));
-    $('urgent-card').hidden = !model.urgentText;
-    $('urgent-card').textContent = model.urgentText;
-    $('evidence-card').hidden = !model.evidenceText;
-    $('evidence-text').textContent = model.evidenceText;
-    $('notification-text').hidden = !model.notification;
-    if (model.notification) $('notification-text').textContent = (model.handoff ? 'Đã mô phỏng chuyển ca. ' : 'Thông báo dự kiến theo P2, chưa gửi. ') + 'Ai: ' + model.notification.who + ' · Khi nào: ' + model.notification.when + ' · Nội dung: ' + model.notification.what + '\nKhông thông báo người thật.';
-    $('session-notice').textContent = model.notice;
-    $('flow-actions').replaceChildren();
-    model.actions.forEach(action => {
-      const verdict = action.tool ? engine.inspectTool(action.tool) : { allowed: true };
-      const policy = action.tool ? policyFor(action.tool) : null;
-      if (action.tool === 'ban_thuoc_ke_don' || policy && policy.level === 'FORBID') {
-        $('flow-actions').append(element('p', (toolNames[action.tool] || action.tool) + ' · Cấm: ' + verdict.reason, 'session-notice')); return;
-      }
-      const actionable = verdict.allowed || ['APPROVAL_REQUIRED', 'CONSENT_REQUIRED'].includes(verdict.status);
-      const el = button(action.label, () => { render(engine.act(action.id)); focusResult(); });
-      el.disabled = !actionable;
-      if (!actionable) { el.title = verdict.reason; $('flow-actions').append(element('p', verdict.reason, 'session-notice')); }
-      $('flow-actions').append(el);
+    $('screening-section').hidden = activeCase !== 'K8';
+    ux.review.fields.forEach(field => { $('field-' + field.id).value = view.screening[field.id]; });
+    $('customer-notice').textContent = customerError || view.notice;
+    $('send-review').disabled = Boolean(view.waiting || view.alerts.length || view.status === 'APPROVED');
+    $('send-review').textContent = view.waiting ? 'Đang chờ dược sĩ' : view.status === 'APPROVED' ? 'Đề xuất đã được duyệt' : 'Gửi dược sĩ xem xét →';
+    $('cancel-review').hidden = !view.waiting;
+    // Only the approved projection may populate the customer product DOM.
+    $('product-card').hidden = !view.product;
+    $('product-name').textContent = view.product ? view.product.name : '';
+    $('product-description').textContent = view.product ? view.product.description : '';
+  }
+  function screeningRows(view) {
+    const rows = [{ label: 'Người dùng thuốc', value: activeCase === 'K4' ? 'Bố · 70 tuổi' : 'Bé · sốt 39°C' }];
+    ux.review.fields.forEach(field => {
+      const value = view.screening[field.id]; const option = field.options.find(item => item[0] === value);
+      rows.push({ label: field.label, value: activeCase === 'K4' && field.id === 'ageBand' ? '70 tuổi' : activeCase === 'K4' && field.id === 'danger' ? 'Tức ngực, khó thở' : option ? option[1] : 'Chưa cung cấp', missing: !value || value === 'unknown' });
     });
-    $('approval-card').hidden = !model.pending;
-    $('consent').checked = false;
-    if (model.pending) {
-      const p = model.pending;
-      $('approval-title').textContent = p.requiresApproval ? 'Chờ ' + p.approver + ' duyệt (mô phỏng)' : 'Cần đồng ý lưu trong phiên';
-      $('approval-description').textContent = (toolNames[p.toolId] || p.toolId) + '\nNội dung đang được xem xét: ' + p.preview + '\nCăn cứ policy: ' + p.policyCopy.justification + '\nKhi không tiếp tục: ' + p.policyCopy.fallback;
-      $('consent-row').hidden = !p.needsConsent;
-      $('approve').textContent = p.requiresApproval ? 'Duyệt mô phỏng · ' + p.approver : 'Đồng ý mô phỏng lưu';
-      $('approve').disabled = p.needsConsent;
-      updateClock(p);
-    }
-    $('session-controls').hidden = model.messages.length === 0;
-    const handoff = engine.inspectTool('chuyen_duoc_si');
-    const handoffPolicy = policyFor('chuyen_duoc_si');
-    $('handoff').hidden = Boolean(model.urgentText || handoffPolicy && handoffPolicy.level === 'FORBID');
-    $('handoff').disabled = Boolean(model.pending || (!handoff.allowed && handoff.status !== 'APPROVAL_REQUIRED'));
-    $('handoff').title = handoff.reason || '';
-    $('undo').hidden = !model.handoff;
-    $('undo').textContent = 'Hủy chuyển dược sĩ mô phỏng';
-    $('discard-note').hidden = !model.savedNote;
-    renderAnchors(model); renderIntegration(model);
+    rows.push({ label: 'Lời khách hàng', value: view.messages.filter(message => message.role === 'user').map(message => message.text).join('\n') });
+    return rows;
   }
-  function focusResult() {
-    const target = $('urgent-card').hidden ? $('session-notice') : $('urgent-card');
-    if (target.textContent) { target.tabIndex = -1; target.focus({ preventScroll: true }); }
+  function updateDecisionButtons(view) {
+    const pending = Boolean(view.request);
+    $('review-confirm').disabled = !pending || !view.approvalReady;
+    $('approve').disabled = !pending || !view.approvalReady || !$('review-confirm').checked;
+    const hasNote = $('review-note').value.trim().length > 0;
+    $('reject').disabled = !pending || !hasNote;
+    $('request-info').disabled = !pending || !hasNote;
   }
-  function updateClock(pending) {
-    $('approval-clock').textContent = pending.expiresAt === null ? 'Chưa đồng ý thì không lưu nội dung.' : 'Còn ' + Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000)) + ' giây · quá hạn không tự thực thi.';
-  }
-  function scenarioReady(scenario) {
-    return Boolean(scenario && scenario.flowId && ux.flows && window.P4Validation.own(ux.flows, scenario.flowId) && !report.issues.some(issue => issue.severity === 'ERROR' && ['P1', 'P2'].includes(issue.whoMustDecide) && (!issue.scenarioId || issue.scenarioId === scenario.id)));
-  }
-  function selectScenario() {
-    const scenario = Array.isArray(scenarios) && scenarios.find(s => s.id === $('scenario-select').value);
-    $('scenario-detail').hidden = !scenario;
-    $('scenario-start').disabled = !scenarioReady(scenario);
-    if (!scenario) return;
-    $('scenario-note').textContent = scenario.id + (scenario.isPriority ? ' · Ca ưu tiên' : '') + (scenarioReady(scenario) ? ' · Có luồng P2, có thể bắt đầu.' : ' · Đã nhận P1. PENDING_P2: chưa có luồng trả lời để bắt đầu.');
-    $('scenario-message').textContent = scenario.message;
-    $('scenario-failure').textContent = scenario.failureMode;
-    $('scenario-expected').textContent = scenario.expectedBehavior;
-    $('scenario-harm').textContent = scenario.harmReason || scenario.harmLevel;
-    $('scenario-source').textContent = scenario.evidence.join('\n');
-  }
-  if (Array.isArray(scenarios) && scenarios.length) {
-    $('scenario-select').replaceChildren(...scenarios.filter(s => s && typeof s.id === 'string').map(s => {
-      const option = element('option', s.id + (s.isPriority ? ' · Ưu tiên' : '')); option.value = s.id; return option;
+  function renderPharmacist() {
+    const view = workflow.pharmacistView(activeCase);
+    const queue = workflow.queue();
+    setStatus('pharmacist-status', view);
+    $('queue-summary').textContent = queue.filter(item => item.waiting).length + ' đề xuất đang chờ';
+    $('review-queue').replaceChildren(...queue.map(item => {
+      const button = node('button', null, 'queue-item'); button.type = 'button'; button.dataset.queueCase = item.id;
+      button.setAttribute('aria-pressed', String(item.id === activeCase));
+      const label = node('span', item.statusLabel, 'status-pill'); label.dataset.state = item.status;
+      button.append(node('strong', item.id + ' · ' + item.title), label);
+      button.addEventListener('click', () => selectCase(item.id)); return button;
     }));
-    $('scenario-select').disabled = false;
-    if (!report.counts.flows) {
-      $('empty-state-title').textContent = 'Đã nhận ' + scenarios.length + ' kịch bản';
-      $('empty-state-copy').textContent = 'Chọn ID để xem nội dung nguồn P1. Đang chờ lời thoại, nút bấm và luồng P2 để bắt đầu mô phỏng. Bạn vẫn có thể thử tin nhắn dựng bên dưới.';
-      $('empty-state-pill').textContent = 'Chưa chạy ca khi thiếu luồng P2';
-    }
-    selectScenario();
+    $('pharmacist-alert').hidden = !view.alerts.length;
+    $('pharmacist-alert').textContent = view.alerts.join('\n') + (view.alerts.length ? '\nLời khách: ' + view.messages.filter(message => message.role === 'user').map(message => message.text).join('\n') + '\nCảnh báo đã hiện ở màn hình khách hàng; không xếp vào hàng chờ duyệt.' : '');
+    const review = view.request || view.lastReview;
+    const hasDetail = Boolean(review && review.status !== 'SUPERSEDED' && !view.alerts.length);
+    $('review-empty').hidden = hasDetail || view.alerts.length > 0;
+    $('review-detail').hidden = !hasDetail;
+    if (!hasDetail) { shownRequest = null; $('review-confirm').checked = false; return; }
+    if (shownRequest !== review.id) { $('review-note').value = ''; $('review-confirm').checked = false; decisionError = ''; shownRequest = review.id; }
+    $('request-id').textContent = review.id;
+    $('review-case-title').textContent = view.title;
+    setStatus('review-status', view);
+    $('screening-summary').replaceChildren(...screeningRows(view).map(row => {
+      const el = node('div'); el.append(node('dt', row.label), node('dd', row.value, row.missing ? 'missing' : '')); return el;
+    }));
+    $('draft-heading').textContent = review.proposal.name;
+    $('draft-description').textContent = review.proposal.description;
+    $('draft-rationale').textContent = review.proposal.rationale;
+    $('review-missing').textContent = view.request && !view.approvalReady ? 'Cần làm rõ trước khi duyệt: ' + view.missing.join(', ') + '.' : view.reviewNote;
+    $('decision-form').hidden = !view.request;
+    $('decision-notice').textContent = decisionError;
+    updateDecisionButtons(view);
   }
-  $('scenario-select').addEventListener('change', selectScenario);
-  $('scenario-start').addEventListener('click', () => { render(engine.start($('scenario-select').value)); focusResult(); });
+  function render() {
+    const queue = workflow.queue();
+    $('pending-count').textContent = String(queue.filter(item => item.waiting).length);
+    caseButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.caseId === activeCase)));
+    $('customer-view').hidden = role !== 'customer'; $('pharmacist-view').hidden = role !== 'pharmacist';
+    for (const name of ['customer', 'pharmacist']) {
+      const tab = $(name + '-tab'); tab.setAttribute('aria-selected', String(role === name)); tab.tabIndex = role === name ? 0 : -1;
+    }
+    // Clear/update the customer product projection even while another role is active.
+    renderCustomer(); if (role === 'pharmacist') renderPharmacist();
+    renderedSignature = signature();
+  }
+  $('customer-tab').addEventListener('click', () => selectRole('customer'));
+  $('pharmacist-tab').addEventListener('click', () => selectRole('pharmacist'));
+  $('role-tabs').addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); selectRole(event.key === 'Home' ? 'customer' : event.key === 'End' ? 'pharmacist' : role === 'customer' ? 'pharmacist' : 'customer', true);
+  });
+  $('screening-form').addEventListener('submit', event => event.preventDefault());
+  $('decision-form').addEventListener('submit', event => event.preventDefault());
+  $('send-review').addEventListener('click', () => { const result = workflow.submit(activeCase); customerError = result.ok ? '' : result.error; render(); });
+  $('cancel-review').addEventListener('click', () => { const result = workflow.cancel(activeCase); customerError = result.ok ? '' : result.error; render(); });
+  $('reset-case').addEventListener('click', () => { workflow.reset(activeCase); customerError = ''; decisionError = ''; shownRequest = null; render(); });
   $('composer').addEventListener('submit', event => {
-    event.preventDefault(); const value = $('message-input').value.trim(); if (!value) return;
-    render(engine.freeInput(value)); $('message-input').value = ''; $('message-input').focus();
+    event.preventDefault(); const result = workflow.sendMessage(activeCase, $('message-input').value);
+    customerError = result.ok ? '' : result.error; if (result.ok) $('message-input').value = ''; render(); $('message-input').focus();
   });
-  $('reset').addEventListener('click', () => { render(engine.reset()); $('message-input').value = ''; $('message-input').focus(); });
-  $('correct').addEventListener('click', () => {
-    const model = engine.snapshot(); const last = [...model.messages].reverse().find(m => m.role === 'user');
-    $('message-input').value = last ? last.text : ''; render(engine.reset());
-    $('session-notice').textContent = 'Bạn có thể sửa tin nhắn dựng bên dưới. Việc sửa hủy yêu cầu duyệt và dữ liệu lưu tạm trước đó; tin tự do sẽ đi qua thông báo giới hạn.';
-    $('message-input').focus();
-  });
-  $('handoff').addEventListener('click', () => { render(engine.requestHandoff()); focusResult(); });
-  $('undo').addEventListener('click', () => render(engine.undo()));
-  $('discard-note').addEventListener('click', () => render(engine.discardNote()));
-  $('consent').addEventListener('change', () => { $('approve').disabled = !$('consent').checked; });
-  $('approve').addEventListener('click', () => {
-    const p = engine.snapshot().pending;
-    if (p) render(engine.approve(p.id, p.approver, $('consent').checked));
-    focusResult();
-  });
-  $('reject').addEventListener('click', () => { const p = engine.snapshot().pending; if (p) render(engine.reject(p.id)); focusResult(); });
-  $('cancel-approval').addEventListener('click', () => { const p = engine.snapshot().pending; if (p) render(engine.reject(p.id, true)); focusResult(); });
-  $('integration-open').addEventListener('click', () => { renderIntegration(engine.snapshot()); $('integration-dialog').showModal(); });
-  $('integration-close').addEventListener('click', () => $('integration-dialog').close());
-  // Tick never executes a tool. Only redraw on expiration, preserving focus/consent while waiting.
+  $('review-note').addEventListener('input', () => updateDecisionButtons(workflow.pharmacistView(activeCase)));
+  $('review-confirm').addEventListener('change', () => updateDecisionButtons(workflow.pharmacistView(activeCase)));
+  function decide(decision) {
+    const request = workflow.pharmacistView(activeCase).request; if (!request) return;
+    const result = workflow.decide(request.id, decision, { actor: 'pharmacist', reviewed: $('review-confirm').checked, note: $('review-note').value });
+    decisionError = result.ok ? '' : result.error; render();
+  }
+  $('approve').addEventListener('click', () => decide('approve'));
+  $('reject').addEventListener('click', () => decide('reject'));
+  $('request-info').addEventListener('click', () => decide('more-info'));
+  render();
   window.setInterval(() => {
-    const previous = engine.snapshot(); if (!previous.pending) return;
-    const current = engine.tick(); if (!current.pending) render(current); else updateClock(current.pending);
-  }, 250);
-  render(engine.snapshot());
-  if (report.issues.some(i => i.severity === 'ERROR')) console.error('[P4 integration]', report.issues);
-  else if (report.issues.length) console.warn('[P4 integration]', report.issues);
+    workflow.tick();
+    if (signature() !== renderedSignature) render();
+  }, 1000);
 })();

@@ -1,9 +1,9 @@
 /* Optional browser QA: Node >=22 + installed Chrome/Edge. No npm packages.
- * Runs the production file:// page offline, then an isolated technical fixture.
+ * Runs the two-role production file:// page offline through the full approval story.
  * Temporary fixture/profile/screenshots stay in ignored .tmp/, never P1/P2/P3 files.
  */
 import { spawn } from 'node:child_process';
-import { cp, mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, access } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -48,7 +48,7 @@ async function evaluate(expression) {
 async function navigate(file) {
   await send('Page.navigate', { url: pathToFileURL(file).href });
   for (let i = 0; i < 70; i++) {
-    if (await evaluate('document.readyState === "complete" && !!window.P4State && document.getElementById("issue-count").textContent !== "…"')) return;
+    if (await evaluate('document.readyState === "complete" && !!window.P4Review && document.getElementById("customer-status").textContent.length > 0')) return;
     await new Promise(resolve => setTimeout(resolve, 70));
   }
   throw new Error('Page did not initialize: ' + file);
@@ -67,6 +67,16 @@ async function screenshot(destination) {
   await mkdir(path.dirname(destination), { recursive: true }); await writeFile(destination, Buffer.from(image.data, 'base64'));
 }
 function pass(name) { results.push(name); console.log('PASS ' + name); }
+
+async function choose(field, value) {
+  await evaluate(`(() => { const input = document.getElementById(${JSON.stringify('field-' + field)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+}
+async function note(value) {
+  await evaluate(`document.getElementById('review-note').value = ${JSON.stringify(value)}; document.getElementById('review-note').dispatchEvent(new Event('input', {bubbles:true}))`);
+}
+async function completeScreening() {
+  for (const [key,value] of Object.entries({ageBand:'over6',danger:'no',duration:'under1',medicines:'none',allergies:'none',conditions:'none',treatment:'none'})) await choose(key,value);
+}
 try {
   const target = await send('Target.createTarget', { url: 'about:blank' }, null);
   const attached = await send('Target.attachToTarget', { targetId: target.targetId, flatten: true }, null); session = attached.sessionId;
@@ -74,93 +84,114 @@ try {
   await send('Page.bringToFront'); await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
-  await navigate(path.join(root, 'prototype/index.html'));
-  assert.equal(await evaluate('document.getElementById("scenario-start").disabled'), true);
-  assert.equal(await evaluate('window.P1_SCENARIOS.length'), 14);
-  assert.equal(await evaluate('document.getElementById("scenario-select").options.length'), 14);
-  assert.equal(await evaluate('document.getElementById("scenario-select").disabled'), false);
-  await evaluate('document.getElementById("scenario-select").value = "K4"; document.getElementById("scenario-select").dispatchEvent(new Event("change"))');
-  assert.equal(await evaluate('document.getElementById("scenario-message").textContent === window.P1_SCENARIOS.find(s => s.id === "K4").message'), true);
-  assert.equal(await evaluate('document.getElementById("scenario-note").textContent.includes("PENDING_P2")'), true);
-  assert.equal(await evaluate('document.getElementById("scenario-start").disabled'), true);
-  pass('T01/T02: file:// offline; 14 P1 cases selectable; missing P2 blocks execution');
-  await screenshot(path.join(root, 'prototype/assets/screen-01.png'));
-  await evaluate('document.getElementById("integration-open").focus()');
-  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-  assert.equal(await evaluate('document.getElementById("integration-dialog").open'), true);
-  assert.equal(await evaluate('document.getElementById("policy-list").textContent.includes("Cần người duyệt · chờ chi tiết")'), true);
-  assert.equal(await evaluate('document.getElementById("policy-list").textContent.includes("Tự làm")'), true);
-  await screenshot(path.join(root, 'prototype/assets/screen-02.png'));
-  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-  assert.equal(await evaluate('document.getElementById("integration-dialog").open'), false); pass('T13: keyboard opens integration dialog; Escape closes');
-  await fill('<img src=x onerror=alert(1)> TEST_UNKNOWN'); await click('#composer button[type=submit]');
-  assert.equal(await evaluate('document.querySelectorAll("#messages img").length'), 0);
-  assert.equal(await evaluate('document.getElementById("messages").textContent.includes(window.P2_UX.common.unknownInput)'), true);
-  assert.equal(await evaluate('document.getElementById("handoff").disabled'), true); pass('T10: arbitrary input uses neutral fallback; text escaped; missing policy blocks handoff');
-  await click('#correct');
-  assert.equal(await evaluate('document.getElementById("message-input").value.includes("TEST_UNKNOWN")'), true);
-  await click('#reset'); assert.equal(await evaluate('document.getElementById("messages").children.length'), 0); pass('correction/reset clears session and returns focus to composer');
-  for (const width of [390, 320, 1366]) {
-    await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 500 });
-    assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true);
-    assert.equal(await evaluate('Array.from(document.querySelectorAll(".button:not(:disabled)")).filter(el => !el.closest("dialog") && !el.closest("[hidden]")).every(el => el.getBoundingClientRect().height >= 44)'), true);
-    if (width === 390) await screenshot(path.join(temp, 'mobile.png'));
-  }
-  pass('T13: no horizontal overflow at 320/390/1366px; active buttons >=44px tall');
-  assert.equal(await evaluate('localStorage.length + sessionStorage.length'), 0); pass('T07/T14: no localStorage/sessionStorage writes');
+  await navigate(path.join(root,'prototype/index.html'));
+  assert.equal(await evaluate('document.querySelectorAll(".case-option").length'),2);
+  assert.equal(await evaluate('document.getElementById("customer-tab").getAttribute("aria-selected")'), 'true');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  assert.equal(await evaluate('document.getElementById("product-name").textContent'),'');
+  const unwanted = ['PENDING_', 'Xem kịch bản nguồn P1', 'Trong bản mô phỏng này', 'Một cuộc trò chuyện.', 'Không có AI API'];
+  for (const text of unwanted) assert.equal(await evaluate('document.body.innerText.includes('+JSON.stringify(text)+')'),false);
+  pass('offline startup: exactly two cases, two role tabs, no legacy notes or customer product');
 
-  // A separate copy exercises rendered controls without inventing production data.
-  const fixtureDirectory = path.join(temp, 'technical-fixture'); await cp(path.join(root, 'prototype'), fixtureDirectory, { recursive: true });
-  const scenario = { id: 'TECH_ONLY', message: 'TECHNICAL_TEST_MESSAGE', riskClass: 'ambiguity', failureMode: 'TEST_FAILURE', expectedBehavior: 'TEST_EXPECTED', harmLevel: 'recoverable', isPriority: false, evidence: ['TEST_SOURCE'], flowId: 'tech', safety: { urgent: false, vulnerable: false, prescription: false, screeningComplete: true } };
-  const flow = { states: [
-    { id: 'SAFE_INFO', aiText: 'TECHNICAL_TEST_COPY', evidenceText: 'TECHNICAL_TEST_EVIDENCE', actions: [{ id: 'save', label: 'TECH_SAVE', next: 'COMPLETE', tool: 'luu_ghi_chu_suc_khoe' }, { id: 'handoff', label: 'TECH_HANDOFF', next: 'COMPLETE', tool: 'chuyen_duoc_si' }, { id: 'product', label: 'TECH_PRODUCT', next: 'COMPLETE', tool: 'goi_y_san_pham' }, { id: 'forbidden', label: 'TECH_FORBIDDEN', next: 'COMPLETE', tool: 'ban_thuoc_ke_don' }] },
-    { id: 'COMPLETE', aiText: 'TECHNICAL_TEST_COMPLETE', evidenceText: 'TEST_EVIDENCE', actions: [] }
-  ], errorType: 'system', notification: { who: 'TEST_ROLE', when: 'TEST_TIME', what: 'TEST_NOTIFICATION' }, haxAnchors: [{ principle: 'TEST_ONLY_1', targetId: 'evidence', reason: 'TEST_REASON' }, { principle: 'TEST_ONLY_2', targetId: 'actions', reason: 'TEST_REASON' }] };
-  const toolIds = ['goi_y_san_pham', 'chuyen_duoc_si', 'khuyen_di_kham', 'luu_ghi_chu_suc_khoe', 'ban_thuoc_ke_don'];
-  const tools = Object.fromEntries(toolIds.map(id => [id, { level: id === 'ban_thuoc_ke_don' ? 'FORBID' : id === 'luu_ghi_chu_suc_khoe' ? 'APPROVAL' : 'AUTO', approver: id === 'luu_ghi_chu_suc_khoe' ? 'khách' : 'none', timeoutMs: 3000, conditions: [], conditionChecks: [], justification: 'TEST_COST', timeoutBehavior: 'TEST_TIMEOUT', fallback: 'TEST_FALLBACK' }]));
-  await writeFile(path.join(fixtureDirectory, 'data/p1-scenarios.js'), 'window.P1_SCENARIOS=' + JSON.stringify([scenario]));
-  await writeFile(path.join(fixtureDirectory, 'data/p2-ux.js'), 'window.P2_UX=' + JSON.stringify({ flows: { tech: flow }, common: { unknownInput: 'TEST_UNKNOWN', simulatedHandoff: 'TEST_HANDOFF_MOCK_ONLY' } }));
-  await writeFile(path.join(fixtureDirectory, 'data/p3-autonomy.js'), 'window.P3_AUTONOMY=' + JSON.stringify({ tools }));
-  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
-  await navigate(path.join(fixtureDirectory, 'index.html')); await click('#scenario-start');
-  assert.equal(await evaluate('document.getElementById("messages").textContent.includes("TECHNICAL_TEST_COPY")'), true);
-  assert.equal(await evaluate('document.querySelectorAll(".anchor-badge").length'), 2);
-  assert.equal(await evaluate('Array.from(document.querySelectorAll("#flow-actions button")).some(b => b.textContent === "TECH_FORBIDDEN")'), false); pass('technical fixture: copy, anchors and FORBID UI render correctly');
-  await click('#flow-actions button');
-  assert.equal(await evaluate('document.getElementById("approval-card").hidden'), false);
-  assert.equal(await evaluate('document.getElementById("approve").disabled'), true);
-  await click('#consent'); assert.equal(await evaluate('document.getElementById("approve").disabled'), false);
-  await click('#approve'); assert.equal(await evaluate('document.getElementById("discard-note").hidden'), false);
-  await click('#discard-note'); assert.equal(await evaluate('document.getElementById("discard-note").hidden'), true); pass('T07/T08 technical fixture: consent -> valid approval -> in-memory save -> delete');
-  await click('#scenario-start'); await click('#flow-actions button'); await click('#reject');
-  assert.equal(await evaluate('document.getElementById("approval-card").hidden'), true);
-  assert.equal(await evaluate('document.getElementById("discard-note").hidden'), true); pass('T08 technical fixture: rejection executes no tool');
-  await click('#flow-actions button'); await new Promise(resolve => setTimeout(resolve, 3300));
-  assert.equal(await evaluate('document.getElementById("approval-card").hidden'), true);
-  assert.equal(await evaluate('document.getElementById("session-notice").textContent.includes("TEST_TIMEOUT")'), true); pass('T08 technical fixture: actual timer expires without execution');
-  await click('#scenario-start'); await click('#handoff');
-  assert.equal(await evaluate('document.getElementById("session-notice").textContent.includes("TEST_HANDOFF_MOCK_ONLY")'), true);
-  await click('#undo'); assert.equal(await evaluate('document.getElementById("undo").hidden'), true); pass('technical fixture: AUTO handoff has no approval wait; undo works');
-  scenario.safety.vulnerable = true;
-  await writeFile(path.join(fixtureDirectory, 'data/p1-scenarios.js'), 'window.P1_SCENARIOS=' + JSON.stringify([scenario]));
-  await navigate(path.join(fixtureDirectory, 'index.html')); await click('#scenario-start');
-  assert.equal(await evaluate('Array.from(document.querySelectorAll("#flow-actions button")).find(b => b.textContent === "TECH_PRODUCT").disabled'), true);
-  pass('T04 technical fixture: vulnerable flag blocks product action on rendered UI');
-  scenario.safety.urgent = true;
-  flow.states.push({ id: 'URGENT', aiText: 'TECHNICAL_URGENT_COPY', evidenceText: 'TECHNICAL_URGENT_EVIDENCE', actions: [] });
-  await writeFile(path.join(fixtureDirectory, 'data/p1-scenarios.js'), 'window.P1_SCENARIOS=' + JSON.stringify([scenario]));
-  await writeFile(path.join(fixtureDirectory, 'data/p2-ux.js'), 'window.P2_UX=' + JSON.stringify({ flows: { tech: flow }, common: { unknownInput: 'TEST_UNKNOWN', simulatedHandoff: 'TEST_HANDOFF_MOCK_ONLY' } }));
-  await navigate(path.join(fixtureDirectory, 'index.html')); await click('#scenario-start');
-  assert.equal(await evaluate('document.getElementById("urgent-card").textContent'), 'TECHNICAL_URGENT_COPY');
-  assert.equal(await evaluate('document.getElementById("urgent-card").hidden'), false);
-  assert.equal(await evaluate('document.getElementById("handoff").hidden'), true);
-  assert.equal(await evaluate('document.querySelectorAll("#flow-actions button").length'), 0);
-  pass('T05 technical fixture: urgent card is immediate; no queue/product controls');
-  assert.equal(exceptions.length, 0, JSON.stringify(exceptions)); assert.equal(externalRequests.length, 0, JSON.stringify(externalRequests)); pass('no uncaught JavaScript errors or HTTP(S) requests across production/technical fixture');
-  await writeFile(path.join(temp, 'results.json'), JSON.stringify({ results, exceptions, externalRequests, productionScreenshots: ['prototype/assets/screen-01.png', 'prototype/assets/screen-02.png'] }, null, 2));
-  console.log('QA artifacts: ' + temp);
+  await click('#send-review');
+  assert.equal(await evaluate('document.getElementById("pending-count").textContent'),'1');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  await click('#pharmacist-tab');
+  assert.equal(await evaluate('document.getElementById("review-detail").hidden'),false);
+  assert.equal(await evaluate('document.getElementById("draft-heading").textContent'), 'Sản phẩm minh họa P-01');
+  assert.equal(await evaluate('document.getElementById("screening-summary").textContent.includes("Chưa cung cấp")'),true);
+  assert.equal(await evaluate('document.getElementById("approve").disabled'),true);
+  pass('pending proposal arrives in pharmacist view; missing screening blocks approval');
+
+  await note('Vui lòng bổ sung tuổi và thông tin sàng lọc.'); await click('#request-info');
+  await click('#customer-tab');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'), 'Dược sĩ cần bổ sung');
+  assert.equal(await evaluate('document.getElementById("messages").textContent.includes("Vui lòng bổ sung tuổi")'),true);
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  pass('request-more-info syncs to customer without exposing proposal');
+
+  await completeScreening(); await click('#send-review');
+  assert.equal(await evaluate('document.getElementById("product-name").textContent'),'');
+  await click('#pharmacist-tab');
+  assert.equal(await evaluate('document.getElementById("screening-summary").textContent.includes("Trên 6 tháng")'),true);
+  assert.equal(await evaluate('document.getElementById("approve").disabled'),true);
+  await click('#review-confirm');
+  assert.equal(await evaluate('document.getElementById("approve").disabled'),false);
+  await screenshot(path.join(root,'prototype/assets/screen-02.png'));
+  await click('#approve'); await click('#customer-tab');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'),'Đã được duyệt');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),false);
+  assert.equal(await evaluate('document.getElementById("product-name").textContent'),'Sản phẩm minh họa P-01');
+  assert.equal(await evaluate('document.getElementById("pending-count").textContent'),'0');
+  await screenshot(path.join(root,'prototype/assets/screen-01.png'));
+  pass('resubmission -> pharmacist review -> approval -> synchronized customer product release');
+
+  await choose('allergies','unknown');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  assert.equal(await evaluate('document.getElementById("product-name").textContent'),'');
+  assert.equal(await evaluate('document.getElementById("customer-notice").textContent.includes("không còn hiệu lực")'),true);
+  pass('screening correction instantly removes previously approved product from customer DOM');
+
+  await choose('allergies','none'); await click('#send-review'); await click('#pharmacist-tab');
+  await note('Đề xuất cần được xem xét thêm.'); await click('#reject'); await click('#customer-tab');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'),'Dược sĩ đã từ chối');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  assert.equal(await evaluate('document.getElementById("messages").textContent.includes("Đề xuất cần được xem xét thêm.")'),true);
+  pass('rejection and reason sync to customer; no product is released');
+
+  await click('#send-review'); await click('#cancel-review');
+  assert.equal(await evaluate('document.getElementById("pending-count").textContent'),'0');
+  assert.equal(await evaluate('document.getElementById("product-card").hidden'),true);
+  pass('customer cancellation clears pending request without release');
+
+  await click('[data-case-id="K4"]');
+  assert.equal(await evaluate('document.getElementById("urgent-alert").hidden'),false);
+  assert.equal(await evaluate('document.getElementById("screening-section").hidden'),true);
+  await click('#pharmacist-tab');
+  assert.equal(await evaluate('document.getElementById("pharmacist-alert").hidden'),false);
+  assert.equal(await evaluate('document.getElementById("review-detail").hidden'),true);
+  assert.equal(await evaluate('document.getElementById("pending-count").textContent'),'0');
+  pass('K4 shows immediate emergency guidance in both views, with no approval queue');
+
+  await click('#customer-tab'); await click('[data-case-id="K8"]'); await choose('ageBand','under3');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'),'Cần cấp cứu ngay');
+  assert.equal(await evaluate('document.getElementById("send-review").disabled'),true);
+  await choose('ageBand','3to6');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'),'Cần được khám kịp thời');
+  assert.equal(await evaluate('document.getElementById("send-review").disabled'),true);
+  await choose('ageBand','over6'); await choose('danger','yes');
+  assert.equal(await evaluate('document.getElementById("customer-status").textContent'),'Cần cấp cứu ngay');
+  pass('K8 danger/young-age branches bypass product review with appropriate guidance');
+
+  await click('#reset-case'); await completeScreening(); await click('#send-review');
+  await evaluate('document.getElementById("customer-tab").focus()');
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});
+  assert.equal(await evaluate('document.getElementById("pharmacist-tab").getAttribute("aria-selected")'),'true');
+  assert.equal(await evaluate('document.activeElement.id'),'pharmacist-tab');
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowLeft',code:'ArrowLeft',windowsVirtualKeyCode:37});
+  assert.equal(await evaluate('document.getElementById("customer-tab").getAttribute("aria-selected")'),'true');
+  pass('role tabs support keyboard arrows and correct ARIA/focus state');
+
+  for (const width of [320,390,1366]) {
+    await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<500});
+    for (const tab of ['#customer-tab','#pharmacist-tab']) {
+      await click(tab);
+      assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);
+      assert.equal(await evaluate('Array.from(document.querySelectorAll(".button:not(:disabled),.tab,.case-option")).filter(el=>!el.closest("[hidden]")).every(el=>el.getBoundingClientRect().height>=44)'),true);
+      if(width===390) await screenshot(path.join(temp,tab.includes('pharmacist')?'pharmacist-mobile.png':'customer-mobile.png'));
+    }
+  }
+  pass('both views fit 320/390/1366px; visible action targets are at least 44px tall');
+
+  await click('#customer-tab'); await fill('<img src=x onerror=alert(1)> TEST_CONTEXT'); await click('#composer button');
+  assert.equal(await evaluate('document.querySelectorAll("#messages img").length'),0);
+  assert.equal(await evaluate('document.getElementById("field-danger").value'),'');
+  assert.equal(await evaluate('document.getElementById("pending-count").textContent'),'0');
+  assert.equal(await evaluate('localStorage.length+sessionStorage.length'),0);
+  assert.equal(exceptions.length,0,JSON.stringify(exceptions)); assert.equal(externalRequests.length,0,JSON.stringify(externalRequests));
+  pass('new free text invalidates old review, remains escaped, and causes no storage/network/errors');
+  await writeFile(path.join(temp,'results.json'),JSON.stringify({results,exceptions,externalRequests},null,2));
+  console.log('QA artifacts: '+temp);
 } finally {
-  try { await send('Browser.close', {}, null); } catch {} browser.kill();
+  try { await send('Browser.close',{},null); } catch {} browser.kill();
 }

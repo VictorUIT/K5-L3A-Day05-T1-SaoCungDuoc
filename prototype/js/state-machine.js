@@ -13,11 +13,14 @@
     if (policy.level === 'FORBID') return blocked(policy.justification);
     if (context.active !== true) return blocked('Cần một kịch bản hợp lệ đang hoạt động.');
     if (context.urgent === true && ['goi_y_san_pham', 'chuyen_duoc_si', 'luu_ghi_chu_suc_khoe'].includes(toolId)) return blocked('Ca khẩn cấp không được trì hoãn bởi gợi ý, lưu hồ sơ hoặc hàng chờ.');
-    if (toolId === 'goi_y_san_pham' && (context.urgent !== false || context.vulnerable !== false || context.prescription !== false || context.screeningComplete !== true)) return blocked('Chưa có đủ sàng lọc đã xác nhận; không tự gợi ý sản phẩm.');
+    const pharmacistReview = policy.level === 'APPROVAL' && policy.approver === 'dược sĩ' && context.pharmacistReviewed === true;
+    if (toolId === 'goi_y_san_pham' && (context.urgent !== false || (context.vulnerable !== false && !pharmacistReview) || context.prescription !== false || context.screeningComplete !== true)) return blocked('Chưa có đủ sàng lọc đã xác nhận; không tự gợi ý sản phẩm.');
     if ((policy.conditionChecks || []).some(check => context[check.field] !== check.equals)) return blocked('Chưa đáp ứng điều kiện do P3 cung cấp.');
     if (toolId === 'luu_ghi_chu_suc_khoe' && context.consent !== true) return blocked('Cần đồng ý rõ ràng cho nội dung hiện tại.', 'CONSENT_REQUIRED');
     if (policy.level === 'APPROVAL') {
-      if (!context.approval || context.approval.toolId !== toolId || context.approval.actor !== policy.approver || !Number.isFinite(context.approval.expiresAt) || !Number.isFinite(context.now) || context.now >= context.approval.expiresAt) return blocked('Cần duyệt mô phỏng hợp lệ, đúng người và còn hạn.', 'APPROVAL_REQUIRED');
+      const approval = context.approval;
+      const validExpiry = approval && (policy.timeoutMode === 'manual' ? approval.expiresAt === null : Number.isFinite(approval.expiresAt) && Number.isFinite(context.now) && context.now < approval.expiresAt);
+      if (!approval || approval.toolId !== toolId || approval.actor !== policy.approver || !validExpiry) return blocked('Cần duyệt mô phỏng hợp lệ, đúng người và còn hạn.', 'APPROVAL_REQUIRED');
     }
     return { allowed: true, status: policy.level, reason: policy.justification };
   }
@@ -93,7 +96,7 @@
       if (!['APPROVAL_REQUIRED', 'CONSENT_REQUIRED'].includes(verdict.status)) { model.notice = verdict.reason; return snapshot(); }
       const policy = autonomy.tools[toolId];
       // Consent prompt does not choose an autonomy level for P3.
-      model.pending = { id: ++serial, toolId, next, previousState: model.state, approver: policy.approver, needsConsent: toolId === 'luu_ghi_chu_suc_khoe', requiresApproval: policy.level === 'APPROVAL', expiresAt: policy.level === 'APPROVAL' ? now() + policy.timeoutMs : null, policyCopy: clone(policy), preview: scenario.message };
+      model.pending = { id: ++serial, toolId, next, previousState: model.state, approver: policy.approver, needsConsent: toolId === 'luu_ghi_chu_suc_khoe', requiresApproval: policy.level === 'APPROVAL', expiresAt: policy.level === 'APPROVAL' && policy.timeoutMode !== 'manual' ? now() + policy.timeoutMs : null, policyCopy: clone(policy), preview: scenario.message };
       transition('AWAITING_APPROVAL');
       return snapshot();
     }
