@@ -1,3 +1,11 @@
+**Lớp:** \_\_\_\_ · **Bàn / zone:** \_\_\_\_ · **Track:** \_\_\_\_
+
+| **Họ và Tên** | **Mã Học Viên** | **Việc đã làm** |
+| ------------- | --------------- | --------------- |
+|               |                 |                 |
+|               |                 |                 |
+|               |                 |                 |
+
 # Dàn ý bài nộp *(spec.md — nộp trước 23:59 ngày lab của lớp)*
 
 > Copy dàn ý này vào `spec.md` của nhóm. Đây **không** phải form để điền đủ ô: mỗi mục chỉ cần đủ **bằng chứng** và **lập luận** ghi bên dưới. Viết ngắn, gạch đầu dòng là được. Hướng dẫn từng chặng: `02-guide.md`. Cách chấm: `04-rubric.md`.
